@@ -12,7 +12,7 @@ Hierarchical (or tree) selector for AngularJS. It can either have the whole data
 
 ### Release notes
 v0.5.1
-  - Added functionality to automatically expact parents when explicitly setting a selected item and using async loading
+  - Added functionality to automatically expand parents when explicitly setting a selected item and using async loading
 
 v0.4.0
   - Added placeholder text functionality
