@@ -1,3 +1,5 @@
+Forked from https://github.com/lukemurray/NgHierarchicalSelector
+
 Angular tree-selector directive
 =======================================
 
@@ -7,9 +9,6 @@ Hierarchical (or tree) selector for AngularJS. It can either have the whole data
 - Select data from a hierarchical/tree structure
 - Asynchronously loading of children, or not
 - Keyboard navigation
-
-### Check it out
-http://lukemurray.github.io/NgHierarchicalSelector/
 
 ### Release notes
 v0.4.0
