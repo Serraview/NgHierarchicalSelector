@@ -20,6 +20,7 @@ angular.module('hierarchical-selector.tree-item', [
       canSelectItem: '=', // reference from the parent control
       loadChildItems: '=', // reference from parent
       itemHasChildren: '&',
+      onExpanded: '&',
       async: '=',
       asyncChildCache: '='
     },
@@ -55,6 +56,12 @@ angular.module('hierarchical-selector.tree-item', [
       $scope.activeSubItem = function(item, $event) {
         if ($scope.onActiveItem) {
           $scope.onActiveItem({item: item});
+        }
+      };
+
+      $scope.handleOnExpanded = function(item, $event) {
+        if ($scope.onExpanded) {
+          $scope.onExpanded();
         }
       };
 
@@ -127,11 +134,19 @@ angular.module('hierarchical-selector.tree-item', [
                 var items = scope.loadChildItems({parent: scope.item});
                 if (angular.isArray(items)) {
                   scope.theChildren = items;
+                  
+                  if (scope.onExpanded) {
+                    scope.onExpanded();
+                  }
                 }
                 items.then(function(data) {
                   scope.theChildren = data;
                   // cache the children
                   scope.asyncChildCache[scope.item.$$hashKey] = data;
+
+                  if (scope.onExpanded) {
+                    scope.onExpanded();
+                  }
                 });
               }
             });

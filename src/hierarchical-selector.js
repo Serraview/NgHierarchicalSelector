@@ -44,13 +44,16 @@ angular.module('hierarchical-selector', [
       // if we have no data and have the callback
       if (!scope.syncData && scope.isAsync) {
         scope.data = [];
+        scope.loadingData = true;
         var items = scope.loadChildItems({parent: null});
         if (angular.isArray(items)) {
           scope.data = items;
+          scope.loadingData = false;
         }
         else {
           items.then(function(data) {
             scope.data = data;
+            scope.loadingData = false;
           });
         }
       }
@@ -87,6 +90,27 @@ angular.module('hierarchical-selector', [
         $scope.asyncChildCache = {};
         $document.off('click', docClickHide);
         $document.off('keydown', keyboardNav);
+      }
+
+      function findById(id, inData) {
+        if (!inData) {
+          inData = $scope.data;
+        }
+        for (var i = 0; i < inData.length; i++) {
+          var actualItem = inData[i];
+          if (actualItem.id === id) {
+            return actualItem;
+          }
+
+          var children = selectorUtils.getChildren(actualItem, $scope.isAsync, $scope.asyncChildCache);
+          if (children) {
+            var childResult = findById(id, children);
+            if (childResult) {
+              return childResult;
+            }
+          }
+        }
+        return null;
       }
 
       function findItemOwnerAndParent(item, array, parentArray, parentIndex) {
@@ -246,6 +270,58 @@ angular.module('hierarchical-selector', [
         }
       };
 
+      $scope.expandParents = function () {
+        if ($scope.isAsync) {
+          for (var i = 0; i < $scope.selectedItems.length; i++) {
+            var item = $scope.selectedItems[i];
+            if (!item.id) { //We don't have an id set on the node, so we can't resolve it
+              continue;
+            }
+            var parentToExpand = item;
+            while(parentToExpand) {
+              var mappedParent = findById(parentToExpand.id);
+              if (!mappedParent || //The parent isn't in our dataset - it needs to be loaded 
+                selectorUtils.getMetaData(mappedParent).isExpanded) { //We found a parent that's loaded, but it's already expanded,
+                                                                      //See if any of it's parents need to be expanded too
+                parentToExpand = parentToExpand.parent;
+              } else {
+                break;
+              }
+            }
+            if (!parentToExpand || !parentToExpand.id) {
+              //We didn't find a resolvable parent, or we found a parent with no id
+              continue;
+            }
+
+            //We either have a root item, or all the parents are properly expanded
+            //In that case, we check if we need to set the selected item to the one in $scope.data
+            //Rather than the object given to us
+            if (parentToExpand === item) {
+              var actualNode = findById(item.id);
+              if (item === actualNode) { //The correct item is already set
+                continue;
+              } else {
+                $scope.itemSelected(actualNode, true); //Now we set the correct 'selected node'
+              }
+            } else {
+              //We found a parent. Expand it if it's not already expanded
+              var actualItem = findById(parentToExpand.id);
+              if (actualItem) {
+                var metaData = selectorUtils.getMetaData(actualItem);
+                if (!metaData.isExpanded) {
+                  metaData.isExpanded = true;
+                  $scope.$apply();
+                }
+              }
+            }
+          }
+        }
+      };
+
+      $scope.childExpanded = function() {
+        setTimeout($scope.expandParents, 0);
+      };
+
       $scope.deselectItem = function(item, $event) {
         $event.stopPropagation();
         $scope.selectedItems.splice($scope.selectedItems.indexOf(item), 1);
@@ -276,13 +352,23 @@ angular.module('hierarchical-selector', [
         }
       };
 
-      $scope.itemSelected = function(item) {
+      $scope.itemSelected = function(item, skipClose) {
         if (($scope.useCanSelectItemCallback && $scope.canSelectItem({item: item}) === false) || ($scope.selectOnlyLeafs && selectorUtils.hasChildren(item, $scope.isAsync))) {
           return;
         }
+
+        if ($scope.loadingData) {
+          setTimeout(function() {
+            $scope.itemSelected(item)
+          }, 0);
+          return;
+        }
+
         var itemMeta = selectorUtils.getMetaData(item);
         if (!$scope.multiSelect) {
-          closePopup();
+          if (!skipClose) {
+            closePopup();
+          }
           for (var i = 0; i < $scope.selectedItems.length; i++) {
             selectorUtils.getMetaData($scope.selectedItems[i]).selected = false;
           }
@@ -304,6 +390,8 @@ angular.module('hierarchical-selector', [
         if ($scope.onSelectionChanged) {
           $scope.onSelectionChanged({items: $scope.selectedItems.length ? $scope.selectedItems : undefined});
         }
+
+        $scope.expandParents();
       };
 
       $scope.clearSelection = function() {

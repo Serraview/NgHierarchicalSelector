@@ -4,6 +4,6 @@
   </div>
   <ul ng-repeat="child in theChildren" ng-if="metaData.isExpanded">
     <div ng-if="child.placeholder" class="loading">Loading...</div>
-    <tree-item ng-if="!child.placeholder" item="child" item-selected="subItemSelected(item)" select-only-leafs="selectOnlyLeafs" use-can-select-item="useCanSelectItem" can-select-item="canSelectItem" multi-select="multiSelect" on-active-item="activeSubItem(item, $event)" load-child-items="loadChildItems" async="async" async-child-cache="asyncChildCache" />
+    <tree-item on-expanded="handleOnExpanded(item)" ng-if="!child.placeholder" item="child" item-selected="subItemSelected(item)" select-only-leafs="selectOnlyLeafs" use-can-select-item="useCanSelectItem" can-select-item="canSelectItem" multi-select="multiSelect" on-active-item="activeSubItem(item, $event)" load-child-items="loadChildItems" async="async" async-child-cache="asyncChildCache" />
   </ul>
 </li>
