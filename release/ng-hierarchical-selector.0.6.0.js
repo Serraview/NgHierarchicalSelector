@@ -8,7 +8,7 @@ angular.module('hierarchical-selector', [
   'hierarchical-selector.tree-item',
   'hierarchical-selector.selectorUtils'
 ])
-.directive('hierarchicalSelector', ['$compile', 'selectorUtils', function ($compile, selectorUtils) {
+.directive('hierarchicalSelector', ['$compile', '$timeout', '$q', 'selectorUtils', function ($compile, $timeout, $q, selectorUtils) {
   return {
     restrict: 'E',
     replace: true,
@@ -43,19 +43,11 @@ angular.module('hierarchical-selector', [
       // init async
       // if we have no data and have the callback
       if (!scope.syncData && scope.isAsync) {
-        scope.data = [];
-        scope.loadingData = true;
-        var items = scope.loadChildItems({parent: null});
-        if (angular.isArray(items)) {
-          scope.data = items;
-          scope.loadingData = false;
-        }
-        else {
-          items.then(function(data) {
-            scope.data = data;
-            scope.loadingData = false;
-          });
-        }
+        scope.dataLoadPromise = $q.when(
+          scope.loadChildItems({parent: null})
+        ).then(function(data) {
+          scope.data = data;
+        });
       }
 
       if (scope.syncData) {
@@ -310,7 +302,6 @@ angular.module('hierarchical-selector', [
                 var metaData = selectorUtils.getMetaData(actualItem);
                 if (!metaData.isExpanded) {
                   metaData.isExpanded = true;
-                  $scope.$apply();
                 }
               }
             }
@@ -318,8 +309,8 @@ angular.module('hierarchical-selector', [
         }
       };
 
-      $scope.childExpanded = function() {
-        setTimeout($scope.expandParents, 0);
+      $scope.childExpanded = function() {        
+        $timeout($scope.expandParents);
       };
 
       $scope.deselectItem = function(item, $event) {
@@ -357,41 +348,36 @@ angular.module('hierarchical-selector', [
           return;
         }
 
-        if ($scope.loadingData) {
-          setTimeout(function() {
-            $scope.itemSelected(item)
-          }, 0);
-          return;
-        }
+        $scope.dataLoadPromise.then(function() {
+          var itemMeta = selectorUtils.getMetaData(item);
+          if (!$scope.multiSelect) {
+            if (!skipClose) {
+              closePopup();
+            }
+            for (var i = 0; i < $scope.selectedItems.length; i++) {
+              selectorUtils.getMetaData($scope.selectedItems[i]).selected = false;
+            }
 
-        var itemMeta = selectorUtils.getMetaData(item);
-        if (!$scope.multiSelect) {
-          if (!skipClose) {
-            closePopup();
-          }
-          for (var i = 0; i < $scope.selectedItems.length; i++) {
-            selectorUtils.getMetaData($scope.selectedItems[i]).selected = false;
-          }
-
-          itemMeta.selected = true;
-          $scope.selectedItems = [];
-          $scope.selectedItems.push(item);
-        } else {
-          itemMeta.selected = true;
-          var indexOfItem = $scope.selectedItems.indexOf(item);
-          if (indexOfItem > -1) {
-            itemMeta.selected = false;
-            $scope.selectedItems.splice(indexOfItem, 1);
-          } else {
+            itemMeta.selected = true;
+            $scope.selectedItems = [];
             $scope.selectedItems.push(item);
+          } else {
+            itemMeta.selected = true;
+            var indexOfItem = $scope.selectedItems.indexOf(item);
+            if (indexOfItem > -1) {
+              itemMeta.selected = false;
+              $scope.selectedItems.splice(indexOfItem, 1);
+            } else {
+              $scope.selectedItems.push(item);
+            }
           }
-        }
 
-        if ($scope.onSelectionChanged) {
-          $scope.onSelectionChanged({items: $scope.selectedItems.length ? $scope.selectedItems : undefined});
-        }
+          if ($scope.onSelectionChanged) {
+            $scope.onSelectionChanged({items: $scope.selectedItems.length ? $scope.selectedItems : undefined});
+          }
 
-        $scope.expandParents();
+          $timeout($scope.expandParents);
+        });
       };
 
       $scope.clearSelection = function() {
