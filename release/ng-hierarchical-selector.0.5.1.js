@@ -44,13 +44,16 @@ angular.module('hierarchical-selector', [
       // if we have no data and have the callback
       if (!scope.syncData && scope.isAsync) {
         scope.data = [];
+        scope.loadingData = true;
         var items = scope.loadChildItems({parent: null});
         if (angular.isArray(items)) {
           scope.data = items;
+          scope.loadingData = false;
         }
         else {
           items.then(function(data) {
             scope.data = data;
+            scope.loadingData = false;
           });
         }
       }
@@ -87,6 +90,27 @@ angular.module('hierarchical-selector', [
         $scope.asyncChildCache = {};
         $document.off('click', docClickHide);
         $document.off('keydown', keyboardNav);
+      }
+
+      function findById(id, inData) {
+        if (!inData) {
+          inData = $scope.data;
+        }
+        for (var i = 0; i < inData.length; i++) {
+          var actualItem = inData[i];
+          if (actualItem.id === id) {
+            return actualItem;
+          }
+
+          var children = selectorUtils.getChildren(actualItem, $scope.isAsync, $scope.asyncChildCache);
+          if (children) {
+            var childResult = findById(id, children);
+            if (childResult) {
+              return childResult;
+            }
+          }
+        }
+        return null;
       }
 
       function findItemOwnerAndParent(item, array, parentArray, parentIndex) {
@@ -246,6 +270,58 @@ angular.module('hierarchical-selector', [
         }
       };
 
+      $scope.expandParents = function () {
+        if ($scope.isAsync) {
+          for (var i = 0; i < $scope.selectedItems.length; i++) {
+            var item = $scope.selectedItems[i];
+            if (!item.id) { //We don't have an id set on the node, so we can't resolve it
+              continue;
+            }
+            var parentToExpand = item;
+            while(parentToExpand) {
+              var mappedParent = findById(parentToExpand.id);
+              if (!mappedParent || //The parent isn't in our dataset - it needs to be loaded 
+                selectorUtils.getMetaData(mappedParent).isExpanded) { //We found a parent that's loaded, but it's already expanded,
+                                                                      //See if any of it's parents need to be expanded too
+                parentToExpand = parentToExpand.parent;
+              } else {
+                break;
+              }
+            }
+            if (!parentToExpand || !parentToExpand.id) {
+              //We didn't find a resolvable parent, or we found a parent with no id
+              continue;
+            }
+
+            //We either have a root item, or all the parents are properly expanded
+            //In that case, we check if we need to set the selected item to the one in $scope.data
+            //Rather than the object given to us
+            if (parentToExpand === item) {
+              var actualNode = findById(item.id);
+              if (item === actualNode) { //The correct item is already set
+                continue;
+              } else {
+                $scope.itemSelected(actualNode, true); //Now we set the correct 'selected node'
+              }
+            } else {
+              //We found a parent. Expand it if it's not already expanded
+              var actualItem = findById(parentToExpand.id);
+              if (actualItem) {
+                var metaData = selectorUtils.getMetaData(actualItem);
+                if (!metaData.isExpanded) {
+                  metaData.isExpanded = true;
+                  $scope.$apply();
+                }
+              }
+            }
+          }
+        }
+      };
+
+      $scope.childExpanded = function() {
+        setTimeout($scope.expandParents, 0);
+      };
+
       $scope.deselectItem = function(item, $event) {
         $event.stopPropagation();
         $scope.selectedItems.splice($scope.selectedItems.indexOf(item), 1);
@@ -276,13 +352,23 @@ angular.module('hierarchical-selector', [
         }
       };
 
-      $scope.itemSelected = function(item) {
+      $scope.itemSelected = function(item, skipClose) {
         if (($scope.useCanSelectItemCallback && $scope.canSelectItem({item: item}) === false) || ($scope.selectOnlyLeafs && selectorUtils.hasChildren(item, $scope.isAsync))) {
           return;
         }
+
+        if ($scope.loadingData) {
+          setTimeout(function() {
+            $scope.itemSelected(item)
+          }, 0);
+          return;
+        }
+
         var itemMeta = selectorUtils.getMetaData(item);
         if (!$scope.multiSelect) {
-          closePopup();
+          if (!skipClose) {
+            closePopup();
+          }
           for (var i = 0; i < $scope.selectedItems.length; i++) {
             selectorUtils.getMetaData($scope.selectedItems[i]).selected = false;
           }
@@ -304,6 +390,8 @@ angular.module('hierarchical-selector', [
         if ($scope.onSelectionChanged) {
           $scope.onSelectionChanged({items: $scope.selectedItems.length ? $scope.selectedItems : undefined});
         }
+
+        $scope.expandParents();
       };
 
       $scope.clearSelection = function() {
@@ -397,6 +485,7 @@ angular.module('hierarchical-selector.tree-item', [
       canSelectItem: '=', // reference from the parent control
       loadChildItems: '=', // reference from parent
       itemHasChildren: '&',
+      onExpanded: '&',
       async: '=',
       asyncChildCache: '='
     },
@@ -432,6 +521,12 @@ angular.module('hierarchical-selector.tree-item', [
       $scope.activeSubItem = function(item, $event) {
         if ($scope.onActiveItem) {
           $scope.onActiveItem({item: item});
+        }
+      };
+
+      $scope.handleOnExpanded = function(item, $event) {
+        if ($scope.onExpanded) {
+          $scope.onExpanded();
         }
       };
 
@@ -504,11 +599,19 @@ angular.module('hierarchical-selector.tree-item', [
                 var items = scope.loadChildItems({parent: scope.item});
                 if (angular.isArray(items)) {
                   scope.theChildren = items;
+                  
+                  if (scope.onExpanded) {
+                    scope.onExpanded();
+                  }
                 }
                 items.then(function(data) {
                   scope.theChildren = data;
                   // cache the children
                   scope.asyncChildCache[scope.item.$$hashKey] = data;
+
+                  if (scope.onExpanded) {
+                    scope.onExpanded();
+                  }
                 });
               }
             });
@@ -520,5 +623,5 @@ angular.module('hierarchical-selector.tree-item', [
 }])
 ;
 
-angular.module("hierarchical-selector").run(["$templateCache", function($templateCache) {$templateCache.put("hierarchical-selector.tpl.html","<div class=\"hierarchical-control\">\r\n  <div class=\"control-group\">\r\n    <button type=\"button\" ng-if=\"showButton\" class=\"pull-down\" ng-click=\"onButtonClicked($event)\"><div class=\"arrow-down\"></div></button>\r\n    <div class=\"hierarchical-input form-control\" ng-class=\"{\'with-btn\': showButton}\" ng-click=\"onControlClicked($event)\">\r\n      <span ng-if=\"selectedItems.length == 0\" class=\"placeholder\">{{placeholder}}</span>\r\n      <span ng-if=\"selectedItems.length > 0\" class=\"selected-items\">\r\n        <span ng-repeat=\"i in selectedItems\" class=\"selected-item\">{{getTagName(i)}} <span class=\"selected-item-close\" ng-click=\"deselectItem(i, $event)\"></span></span>\r\n      </span>\r\n      <!-- <input type=\"text\" class=\"blend-in\" /> -->\r\n    </div>\r\n  </div>\r\n  <div class=\"tree-view-outer\" ng-show=\"showTree\">\r\n    <div class=\"tree-view\" ng-show=\"showTree\">\r\n      <ul>\r\n        <tree-item class=\"top-level\" ng-repeat=\"item in data\" item=\"item\" select-only-leafs=\"selectOnlyLeafs\" use-can-select-item=\"useCanSelectItemCallback\" can-select-item=\"canSelectItem\" multi-select=\"multiSelect\" item-selected=\"itemSelected(item)\" on-active-item=\"onActiveItem(item)\" load-child-items=\"loadChildItems\" async=\"isAsync\" item-has-children=\"hasChildren(parent)\" async-child-cache=\"asyncChildCache\" />\r\n      </ul>\r\n    </div>\r\n  </div>\r\n</div>\r\n");
-$templateCache.put("tree-item.tpl.html","<li>\r\n  <div class=\"item-container\" ng-class=\"{active: metaData.isActive, selected: metaData.selected}\" ng-mouseover=\"onMouseOver($event)\" ng-click=\"clickSelectItem(item, $event)\">\r\n    <span ng-if=\"showExpando(item)\" class=\"expando\" ng-class=\"{\'expando-opened\': metaData.isExpanded}\" ng-click=\"onExpandoClicked(item, $event)\"></span><div class=\"item-details\"><input class=\"tree-checkbox\" type=\"checkbox\" ng-if=\"showCheckbox()\" ng-checked=\"metaData.selected\" />{{item.name}}</div>\r\n  </div>\r\n  <ul ng-repeat=\"child in theChildren\" ng-if=\"metaData.isExpanded\">\r\n    <div ng-if=\"child.placeholder\" class=\"loading\">Loading...</div>\r\n    <tree-item ng-if=\"!child.placeholder\" item=\"child\" item-selected=\"subItemSelected(item)\" select-only-leafs=\"selectOnlyLeafs\" use-can-select-item=\"useCanSelectItem\" can-select-item=\"canSelectItem\" multi-select=\"multiSelect\" on-active-item=\"activeSubItem(item, $event)\" load-child-items=\"loadChildItems\" async=\"async\" async-child-cache=\"asyncChildCache\" />\r\n  </ul>\r\n</li>\r\n");}]);
+angular.module("hierarchical-selector").run(["$templateCache", function($templateCache) {$templateCache.put("hierarchical-selector.tpl.html","<div class=\"hierarchical-control\">\r\n  <div class=\"control-group\">\r\n    <button type=\"button\" ng-if=\"showButton\" class=\"pull-down\" ng-click=\"onButtonClicked($event)\"><div class=\"arrow-down\"></div></button>\r\n    <div class=\"hierarchical-input form-control\" ng-class=\"{\'with-btn\': showButton}\" ng-click=\"onControlClicked($event)\">\r\n      <span ng-if=\"selectedItems.length == 0\" class=\"placeholder\">{{placeholder}}</span>\r\n      <span ng-if=\"selectedItems.length > 0\" class=\"selected-items\">\r\n        <span ng-repeat=\"i in selectedItems\" class=\"selected-item\">{{getTagName(i)}} <span class=\"selected-item-close\" ng-click=\"deselectItem(i, $event)\"></span></span>\r\n      </span>\r\n      <!-- <input type=\"text\" class=\"blend-in\" /> -->\r\n    </div>\r\n  </div>\r\n  <div class=\"tree-view-outer\" ng-show=\"showTree\">\r\n    <div class=\"tree-view\" ng-show=\"showTree\">\r\n      <ul>\r\n        <tree-item class=\"top-level\" on-expanded=\"childExpanded(item)\" ng-repeat=\"item in data\" item=\"item\" select-only-leafs=\"selectOnlyLeafs\" use-can-select-item=\"useCanSelectItemCallback\" can-select-item=\"canSelectItem\" multi-select=\"multiSelect\" item-selected=\"itemSelected(item)\" on-active-item=\"onActiveItem(item)\" load-child-items=\"loadChildItems\" async=\"isAsync\" item-has-children=\"hasChildren(parent)\" async-child-cache=\"asyncChildCache\" />\r\n      </ul>\r\n    </div>\r\n  </div>\r\n</div>\r\n");
+$templateCache.put("tree-item.tpl.html","<li>\r\n  <div class=\"item-container\" ng-class=\"{active: metaData.isActive, selected: metaData.selected}\" ng-mouseover=\"onMouseOver($event)\" ng-click=\"clickSelectItem(item, $event)\">\r\n    <span ng-if=\"showExpando(item)\" class=\"expando\" ng-class=\"{\'expando-opened\': metaData.isExpanded}\" ng-click=\"onExpandoClicked(item, $event)\"></span><div class=\"item-details\"><input class=\"tree-checkbox\" type=\"checkbox\" ng-if=\"showCheckbox()\" ng-checked=\"metaData.selected\" />{{item.name}}</div>\r\n  </div>\r\n  <ul ng-repeat=\"child in theChildren\" ng-if=\"metaData.isExpanded\">\r\n    <div ng-if=\"child.placeholder\" class=\"loading\">Loading...</div>\r\n    <tree-item on-expanded=\"handleOnExpanded(item)\" ng-if=\"!child.placeholder\" item=\"child\" item-selected=\"subItemSelected(item)\" select-only-leafs=\"selectOnlyLeafs\" use-can-select-item=\"useCanSelectItem\" can-select-item=\"canSelectItem\" multi-select=\"multiSelect\" on-active-item=\"activeSubItem(item, $event)\" load-child-items=\"loadChildItems\" async=\"async\" async-child-cache=\"asyncChildCache\" />\r\n  </ul>\r\n</li>\r\n");}]);
