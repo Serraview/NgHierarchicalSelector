@@ -3,6 +3,10 @@
   "version": "0.6.0",
   "description": "A hierarchical (or tree) selection control for AngularJS",
   "main": "index.js",
+  "publishConfig": {
+    "registry": "http://svdev01:8181/npm/packages",
+    "ca": null
+  },
   "directories": {
     "test": "test"
   },
