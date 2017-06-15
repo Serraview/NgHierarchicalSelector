@@ -126,7 +126,8 @@ angular.module('hierarchical-selector.tree-item', [
                 return;
               }
               if (scope.asyncChildCache[scope.item.$$hashKey]) {
-                return scope.asyncChildCache[scope.item.$$hashKey];
+                scope.theChildren = scope.asyncChildCache[scope.item.$$hashKey];
+				return;
               }
 
               scope.theChildren = [{placeholder: true}];
