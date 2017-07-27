@@ -27,7 +27,6 @@ angular.module('hierarchical-selector', [
     },
     link: function(scope, element, attrs) {
       // is there a better way to know the callbacks are actually set. So we have make decisions on what to use
-      //typeof(x) === 'function';//like this? What do you mean by 'actually set'?
       if (attrs.canSelectItem) {
         scope.useCanSelectItemCallback = true;
       }
@@ -381,7 +380,6 @@ angular.module('hierarchical-selector', [
             $scope.selectedItems = [];
             $scope.selectedItems.push(item[i]);
             } else {
-              // var indexOfItem = $scope.selectedItems.indexOf(item);//FAILS ON OBJECTS. Especially when another selector has been slipped in underneath us
               var indexOfItem = $scope.selectedItems.findIndex(idFilterFunc(item[i].id));
               if (indexOfItem > -1) {
                 itemMeta.selected = false;
