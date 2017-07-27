@@ -21,7 +21,7 @@ angular.module('hierarchical-selector', [
       canSelectItem: '&',
       loadChildItems: '&',
       itemHasChildren: '&',
-	    selection: '=',
+        selection: '=',
       tagName: '&',
       placeholder: '@'
     },
@@ -103,6 +103,12 @@ angular.module('hierarchical-selector', [
           }
         }
         return null;
+      }
+      
+      function idFilterFunc(id){
+        return function(it){
+          return it.id === id;
+        };
       }
 
       function findItemOwnerAndParent(item, array, parentArray, parentIndex) {
@@ -290,7 +296,8 @@ angular.module('hierarchical-selector', [
             //Rather than the object given to us
             if (parentToExpand === item) {
               var actualNode = findById(item.id);
-              if (item === actualNode) { //The correct item is already set
+              if ($scope.multiSelect || item === actualNode) { //The correct item is already set
+                selectorUtils.getMetaData(actualNode).selected = true; // if it's in selectedItems, it should be selected! Only really relevant for multi-select
                 continue;
               } else {
                 $scope.itemSelected(actualNode, true); //Now we set the correct 'selected node'
@@ -343,32 +350,44 @@ angular.module('hierarchical-selector', [
         }
       };
 
-      $scope.itemSelected = function(item, skipClose) {
-        if (($scope.useCanSelectItemCallback && $scope.canSelectItem({item: item}) === false) || ($scope.selectOnlyLeafs && selectorUtils.hasChildren(item, $scope.isAsync))) {
-          return;
-        }
-
-        $scope.dataLoadPromise.then(function() {
-          var itemMeta = selectorUtils.getMetaData(item);
-          if (!$scope.multiSelect) {
-            if (!skipClose) {
-              closePopup();
+      $scope.itemSelected = function(item, skipClose) { //triggers for each individual item clicked
+        if(angular.isArray(item)){
+          for(var i = 0; i<item.length; i++){
+            if (($scope.useCanSelectItemCallback && $scope.canSelectItem({item: item[i]}) === false) || ($scope.selectOnlyLeafs && selectorUtils.hasChildren(item[i], $scope.isAsync))) {
+              return;
             }
-            for (var i = 0; i < $scope.selectedItems.length; i++) {
-              selectorUtils.getMetaData($scope.selectedItems[i]).selected = false;
+          }
+        } else {
+          if (($scope.useCanSelectItemCallback && $scope.canSelectItem({item: item}) === false) || ($scope.selectOnlyLeafs && selectorUtils.hasChildren(item, $scope.isAsync))) {
+            return;
+          }
+        }
+        $scope.dataLoadPromise.then(function() {
+          if(!angular.isArray(item)){
+            item = [item];
+          }
+          for(var i = 0; i<item.length; i++){
+            var itemMeta = selectorUtils.getMetaData(item[i]);
+            if (!$scope.multiSelect) {
+              if (!skipClose) {
+                closePopup();
+              }
+              for (var j = 0; j < $scope.selectedItems.length; j++) {
+                selectorUtils.getMetaData($scope.selectedItems[j]).selected = false;
             }
 
             itemMeta.selected = true;
             $scope.selectedItems = [];
-            $scope.selectedItems.push(item);
-          } else {
-            itemMeta.selected = true;
-            var indexOfItem = $scope.selectedItems.indexOf(item);
-            if (indexOfItem > -1) {
-              itemMeta.selected = false;
-              $scope.selectedItems.splice(indexOfItem, 1);
+            $scope.selectedItems.push(item[i]);
             } else {
-              $scope.selectedItems.push(item);
+              var indexOfItem = $scope.selectedItems.findIndex(idFilterFunc(item[i].id));
+              if (indexOfItem > -1) {
+                itemMeta.selected = false;
+                $scope.selectedItems.splice(indexOfItem, 1);
+              } else {
+                itemMeta.selected = true;
+                $scope.selectedItems.push(item[i]);
+              }
             }
           }
 
@@ -389,25 +408,18 @@ angular.module('hierarchical-selector', [
 
       $scope.$watch('selection', function(newValue, oldValue) {
         if (newValue) {
-	        if (angular.isArray(newValue)) {
-		        for (var i = 0; i < newValue.length; i++) {
-			        $scope.itemSelected(angular.copy(newValue[i]));
-		        }
-	        }
-	        else {
-		        $scope.itemSelected(angular.copy(newValue));
-	        }
-	      }
-	      else if ($scope.selectedItems.length > 0) { // only clear if it is changing/don't trigger a onSelectionChanged
+          $scope.itemSelected(angular.copy(newValue));
+        }
+        else if ($scope.selectedItems.length > 0) { // only clear if it is changing/don't trigger a onSelectionChanged
           $scope.clearSelection();
         }
-	  });
+      });
 
       $scope.getTagName = function(i) {
         if ($scope.useTagName) {
            return $scope.tagName({ item: i });
         }
-		    return i.name;
+            return i.name;
       };
     }]
   };

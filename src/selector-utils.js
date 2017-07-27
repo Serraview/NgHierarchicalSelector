@@ -1,5 +1,5 @@
 /**
-* Service contianing shared fuctions between the two directives
+* Service containing shared functions between the two directives
 */
 angular.module('hierarchical-selector.selectorUtils', [])
 .factory('selectorUtils', ['$q', function($q) {
@@ -24,7 +24,7 @@ angular.module('hierarchical-selector.selectorUtils', [])
     getChildren: function(item, async, cache) {
       var children = async ? cache[item.$$hashKey] : item.children;
       if (async && !children && item.hasChildren) {
-        // we haven't loaded them yet. Return palceholder
+        // we haven't loaded them yet. Return placeholder
         return [];
       }
       return children;

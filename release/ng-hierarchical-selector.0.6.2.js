@@ -21,12 +21,13 @@ angular.module('hierarchical-selector', [
       canSelectItem: '&',
       loadChildItems: '&',
       itemHasChildren: '&',
-	    selection: '=',
+        selection: '=',
       tagName: '&',
       placeholder: '@'
     },
     link: function(scope, element, attrs) {
       // is there a better way to know the callbacks are actually set. So we have make decisions on what to use
+      //typeof(x) === 'function';//like this? What do you mean by 'actually set'?
       if (attrs.canSelectItem) {
         scope.useCanSelectItemCallback = true;
       }
@@ -103,6 +104,12 @@ angular.module('hierarchical-selector', [
           }
         }
         return null;
+      }
+      
+      function idFilterFunc(id){
+        return function(it){
+          return it.id === id;
+        };
       }
 
       function findItemOwnerAndParent(item, array, parentArray, parentIndex) {
@@ -290,7 +297,8 @@ angular.module('hierarchical-selector', [
             //Rather than the object given to us
             if (parentToExpand === item) {
               var actualNode = findById(item.id);
-              if (item === actualNode) { //The correct item is already set
+              if ($scope.multiSelect || item === actualNode) { //The correct item is already set
+                selectorUtils.getMetaData(actualNode).selected = true; // if it's in selectedItems, it should be selected! Only really relevant for multi-select
                 continue;
               } else {
                 $scope.itemSelected(actualNode, true); //Now we set the correct 'selected node'
@@ -343,32 +351,45 @@ angular.module('hierarchical-selector', [
         }
       };
 
-      $scope.itemSelected = function(item, skipClose) {
-        if (($scope.useCanSelectItemCallback && $scope.canSelectItem({item: item}) === false) || ($scope.selectOnlyLeafs && selectorUtils.hasChildren(item, $scope.isAsync))) {
-          return;
-        }
-
-        $scope.dataLoadPromise.then(function() {
-          var itemMeta = selectorUtils.getMetaData(item);
-          if (!$scope.multiSelect) {
-            if (!skipClose) {
-              closePopup();
+      $scope.itemSelected = function(item, skipClose) { //triggers for each individual item clicked
+        if(angular.isArray(item)){
+          for(var i = 0; i<item.length; i++){
+            if (($scope.useCanSelectItemCallback && $scope.canSelectItem({item: item[i]}) === false) || ($scope.selectOnlyLeafs && selectorUtils.hasChildren(item[i], $scope.isAsync))) {
+              return;
             }
-            for (var i = 0; i < $scope.selectedItems.length; i++) {
-              selectorUtils.getMetaData($scope.selectedItems[i]).selected = false;
+          }
+        } else {
+          if (($scope.useCanSelectItemCallback && $scope.canSelectItem({item: item}) === false) || ($scope.selectOnlyLeafs && selectorUtils.hasChildren(item, $scope.isAsync))) {
+            return;
+          }
+        }
+        $scope.dataLoadPromise.then(function() {
+          if(!angular.isArray(item)){
+            item = [item];
+          }
+          for(var i = 0; i<item.length; i++){
+            var itemMeta = selectorUtils.getMetaData(item[i]);
+            if (!$scope.multiSelect) {
+              if (!skipClose) {
+                closePopup();
+              }
+              for (var j = 0; j < $scope.selectedItems.length; j++) {
+                selectorUtils.getMetaData($scope.selectedItems[j]).selected = false;
             }
 
             itemMeta.selected = true;
             $scope.selectedItems = [];
-            $scope.selectedItems.push(item);
-          } else {
-            itemMeta.selected = true;
-            var indexOfItem = $scope.selectedItems.indexOf(item);
-            if (indexOfItem > -1) {
-              itemMeta.selected = false;
-              $scope.selectedItems.splice(indexOfItem, 1);
+            $scope.selectedItems.push(item[i]);
             } else {
-              $scope.selectedItems.push(item);
+              // var indexOfItem = $scope.selectedItems.indexOf(item);//FAILS ON OBJECTS. Especially when another selector has been slipped in underneath us
+              var indexOfItem = $scope.selectedItems.findIndex(idFilterFunc(item[i].id));
+              if (indexOfItem > -1) {
+                itemMeta.selected = false;
+                $scope.selectedItems.splice(indexOfItem, 1);
+              } else {
+                itemMeta.selected = true;
+                $scope.selectedItems.push(item[i]);
+              }
             }
           }
 
@@ -389,33 +410,25 @@ angular.module('hierarchical-selector', [
 
       $scope.$watch('selection', function(newValue, oldValue) {
         if (newValue) {
-	        if (angular.isArray(newValue)) {
-		        for (var i = 0; i < newValue.length; i++) {
-			        $scope.itemSelected(angular.copy(newValue[i]));
-		        }
-	        }
-	        else {
-		        $scope.itemSelected(angular.copy(newValue));
-	        }
-	      }
-	      else if ($scope.selectedItems.length > 0) { // only clear if it is changing/don't trigger a onSelectionChanged
+          $scope.itemSelected(angular.copy(newValue));
+        }
+        else if ($scope.selectedItems.length > 0) { // only clear if it is changing/don't trigger a onSelectionChanged
           $scope.clearSelection();
         }
-	  });
+      });
 
       $scope.getTagName = function(i) {
         if ($scope.useTagName) {
            return $scope.tagName({ item: i });
         }
-		    return i.name;
+            return i.name;
       };
     }]
   };
 }])
 ;
-
 /**
-* Service contianing shared fuctions between the two directives
+* Service containing shared functions between the two directives
 */
 angular.module('hierarchical-selector.selectorUtils', [])
 .factory('selectorUtils', ['$q', function($q) {
@@ -440,7 +453,7 @@ angular.module('hierarchical-selector.selectorUtils', [])
     getChildren: function(item, async, cache) {
       var children = async ? cache[item.$$hashKey] : item.children;
       if (async && !children && item.hasChildren) {
-        // we haven't loaded them yet. Return palceholder
+        // we haven't loaded them yet. Return placeholder
         return [];
       }
       return children;
@@ -611,4 +624,4 @@ angular.module('hierarchical-selector.tree-item', [
 ;
 
 angular.module("hierarchical-selector").run(["$templateCache", function($templateCache) {$templateCache.put("hierarchical-selector.tpl.html","<div class=\"hierarchical-control\">\r\n  <div class=\"control-group\">\r\n    <button type=\"button\" ng-if=\"showButton\" class=\"pull-down\" ng-click=\"onButtonClicked($event)\"><div class=\"arrow-down\"></div></button>\r\n    <div class=\"hierarchical-input form-control\" ng-class=\"{\'with-btn\': showButton}\" ng-click=\"onControlClicked($event)\">\r\n      <span ng-if=\"selectedItems.length == 0\" class=\"placeholder\">{{placeholder}}</span>\r\n      <span ng-if=\"selectedItems.length > 0\" class=\"selected-items\">\r\n        <span ng-repeat=\"i in selectedItems\" class=\"selected-item\">{{getTagName(i)}} <span class=\"selected-item-close\" ng-click=\"deselectItem(i, $event)\"></span></span>\r\n      </span>\r\n      <!-- <input type=\"text\" class=\"blend-in\" /> -->\r\n    </div>\r\n  </div>\r\n  <div class=\"tree-view-outer\" ng-show=\"showTree\">\r\n    <div class=\"tree-view\" ng-show=\"showTree\">\r\n      <ul>\r\n        <tree-item class=\"top-level\" on-expanded=\"childExpanded(item)\" ng-repeat=\"item in data\" item=\"item\" select-only-leafs=\"selectOnlyLeafs\" use-can-select-item=\"useCanSelectItemCallback\" can-select-item=\"canSelectItem\" multi-select=\"multiSelect\" item-selected=\"itemSelected(item)\" on-active-item=\"onActiveItem(item)\" load-child-items=\"loadChildItems\" async=\"isAsync\" item-has-children=\"hasChildren(parent)\" async-child-cache=\"asyncChildCache\" />\r\n      </ul>\r\n    </div>\r\n  </div>\r\n</div>\r\n");
-$templateCache.put("tree-item.tpl.html","<li>\r\n  <div class=\"item-container\" ng-class=\"{active: metaData.isActive, selected: metaData.selected}\" ng-mouseover=\"onMouseOver($event)\" ng-click=\"clickSelectItem(item, $event)\">\r\n    <span ng-if=\"showExpando(item)\" class=\"expando\" ng-class=\"{\'expando-opened\': metaData.isExpanded}\" ng-click=\"onExpandoClicked(item, $event)\"></span><div class=\"item-details\"><input class=\"tree-checkbox\" type=\"checkbox\" ng-if=\"showCheckbox()\" ng-checked=\"metaData.selected\" />{{item.name}}</div>\r\n  </div>\r\n  <ul ng-repeat=\"child in theChildren\" ng-if=\"metaData.isExpanded\">\r\n    <div ng-if=\"child.placeholder\" class=\"loading\">Loading...</div>\r\n    <tree-item on-expanded=\"handleOnExpanded(item)\" ng-if=\"!child.placeholder\" item=\"child\" item-selected=\"subItemSelected(item)\" select-only-leafs=\"selectOnlyLeafs\" use-can-select-item=\"useCanSelectItem\" can-select-item=\"canSelectItem\" multi-select=\"multiSelect\" on-active-item=\"activeSubItem(item, $event)\" load-child-items=\"loadChildItems\" async=\"async\" async-child-cache=\"asyncChildCache\" />\r\n  </ul>\r\n</li>\r\n");}]);
+$templateCache.put("tree-item.tpl.html","<li>\r\n  <div class=\"item-container\" ng-class=\"{active: metaData.isActive, selected: metaData.selected}\" ng-mouseover=\"onMouseOver($event)\" ng-click=\"clickSelectItem(item, $event)\">\r\n    <span ng-if=\"showExpando(item)\" class=\"expando\" ng-class=\"{\'expando-opened\': metaData.isExpanded}\" ng-click=\"onExpandoClicked(item, $event)\"></span><div class=\"item-details\">{{item.name}}</div>\r\n  </div>\r\n  <ul ng-repeat=\"child in theChildren\" ng-if=\"metaData.isExpanded\">\r\n    <div ng-if=\"child.placeholder\" class=\"loading\">Loading...</div>\r\n    <tree-item on-expanded=\"handleOnExpanded(item)\" ng-if=\"!child.placeholder\" item=\"child\" item-selected=\"subItemSelected(item)\" select-only-leafs=\"selectOnlyLeafs\" use-can-select-item=\"useCanSelectItem\" can-select-item=\"canSelectItem\" multi-select=\"multiSelect\" on-active-item=\"activeSubItem(item, $event)\" load-child-items=\"loadChildItems\" async=\"async\" async-child-cache=\"asyncChildCache\" />\r\n  </ul>\r\n</li>\r\n");}]);

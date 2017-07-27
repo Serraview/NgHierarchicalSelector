@@ -1,6 +1,6 @@
 <li>
   <div class="item-container" ng-class="{active: metaData.isActive, selected: metaData.selected}" ng-mouseover="onMouseOver($event)" ng-click="clickSelectItem(item, $event)">
-    <span ng-if="showExpando(item)" class="expando" ng-class="{'expando-opened': metaData.isExpanded}" ng-click="onExpandoClicked(item, $event)"></span><div class="item-details"><input class="tree-checkbox" type="checkbox" ng-if="showCheckbox()" ng-checked="metaData.selected" />{{item.name}}</div>
+    <span ng-if="showExpando(item)" class="expando" ng-class="{'expando-opened': metaData.isExpanded}" ng-click="onExpandoClicked(item, $event)"></span><div class="item-details">{{item.name}}</div>
   </div>
   <ul ng-repeat="child in theChildren" ng-if="metaData.isExpanded">
     <div ng-if="child.placeholder" class="loading">Loading...</div>
