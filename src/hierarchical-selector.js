@@ -82,6 +82,9 @@ angular.module('hierarchical-selector', [
         $scope.asyncChildCache = {};
         $document.off('click', docClickHide);
         $document.off('keydown', keyboardNav);
+		if($scope.$parent.onViewClosed){
+		  $scope.$parent.onViewClosed();
+   }
       }
 
       function findById(id, inData) {
@@ -322,13 +325,24 @@ angular.module('hierarchical-selector', [
 
       $scope.deselectItem = function(item, $event) {
         $event.stopPropagation();
-        $scope.selectedItems.splice($scope.selectedItems.indexOf(item), 1);
-        closePopup();
-        var itemMeta = selectorUtils.getMetaData(item);
-        itemMeta.selected = false;
+		if($scope.multiSelect){
+		  var itemMeta;
+		  for(var it in $scope.selectedItems){
+		    selectorUtils.getMetaData($scope.selectedItems[it]).selected = false;
+		  }
+		  $scope.selectedItems = [];
+		}
+		else
+		{
+          $scope.selectedItems.splice($scope.selectedItems.indexOf(item), 1);
+					 
+          var itemMeta = selectorUtils.getMetaData(item);
+          itemMeta.selected = false;
+		}
         if ($scope.onSelectionChanged) {
           $scope.onSelectionChanged({items: $scope.selectedItems.length ? $scope.selectedItems : undefined});
         }
+        closePopup();
       };
 
       $scope.onButtonClicked = function($event) {
