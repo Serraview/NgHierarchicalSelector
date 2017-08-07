@@ -27,7 +27,6 @@ angular.module('hierarchical-selector', [
     },
     link: function(scope, element, attrs) {
       // is there a better way to know the callbacks are actually set. So we have make decisions on what to use
-      //typeof(x) === 'function';//like this? What do you mean by 'actually set'?
       if (attrs.canSelectItem) {
         scope.useCanSelectItemCallback = true;
       }
@@ -83,6 +82,9 @@ angular.module('hierarchical-selector', [
         $scope.asyncChildCache = {};
         $document.off('click', docClickHide);
         $document.off('keydown', keyboardNav);
+        if($scope.$parent.onViewClosed){
+          $scope.$parent.onViewClosed();
+   }
       }
 
       function findById(id, inData) {
@@ -323,13 +325,24 @@ angular.module('hierarchical-selector', [
 
       $scope.deselectItem = function(item, $event) {
         $event.stopPropagation();
-        $scope.selectedItems.splice($scope.selectedItems.indexOf(item), 1);
-        closePopup();
-        var itemMeta = selectorUtils.getMetaData(item);
-        itemMeta.selected = false;
+        if($scope.multiSelect){
+          var itemMeta;
+          for(var it in $scope.selectedItems){
+            selectorUtils.getMetaData($scope.selectedItems[it]).selected = false;
+          }
+          $scope.selectedItems = [];
+        }
+        else
+        {
+          $scope.selectedItems.splice($scope.selectedItems.indexOf(item), 1);
+                     
+          var itemMeta = selectorUtils.getMetaData(item);
+          itemMeta.selected = false;
+        }
         if ($scope.onSelectionChanged) {
           $scope.onSelectionChanged({items: $scope.selectedItems.length ? $scope.selectedItems : undefined});
         }
+        closePopup();
       };
 
       $scope.onButtonClicked = function($event) {
@@ -381,7 +394,6 @@ angular.module('hierarchical-selector', [
             $scope.selectedItems = [];
             $scope.selectedItems.push(item[i]);
             } else {
-              // var indexOfItem = $scope.selectedItems.indexOf(item);//FAILS ON OBJECTS. Especially when another selector has been slipped in underneath us
               var indexOfItem = $scope.selectedItems.findIndex(idFilterFunc(item[i].id));
               if (indexOfItem > -1) {
                 itemMeta.selected = false;
